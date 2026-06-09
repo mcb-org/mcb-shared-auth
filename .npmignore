@@ -1,0 +1,13 @@
+# Ignore files
+.DS_Store
+node_modules
+
+.env
+/type
+/utils
+/middlewares
+
+tsconfig.json
+eslint.config.js
+.eslintrc.cjs
+commitlint.config.cjs
