@@ -2,6 +2,8 @@ export interface AccessTokenPayload {
   sub: string; // subject (user id)
   email: string;
   name?: string;
+  role?: string; // platform/tenant role (e.g. SUPER_ADMIN, ORG_ADMIN, DRIVER, USER)
+  tenantId?: string; // tenant scope for multi-tenant data access
   type: "access";
   jti?: string; // JWT ID for tracking
 }
@@ -33,6 +35,8 @@ export interface RefreshTokenRecord {
     id: string;
     email: string;
     name?: string | null;
+    role?: string | null;
+    tenantId?: string | null;
   };
 }
 
@@ -51,6 +55,8 @@ export interface GenerateTokenPairParams {
     id: string;
     email: string;
     name?: string | null;
+    role?: string | null;
+    tenantId?: string | null;
   };
   deviceInfo?: string;
   ipAddress?: string;

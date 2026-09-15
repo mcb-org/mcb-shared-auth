@@ -6,7 +6,13 @@ import jwt from "jsonwebtoken";
  * Generate a new access token
  */
 export const generateAccessToken = (
-  user: { id: string; email: string; name?: string | null },
+  user: {
+    id: string;
+    email: string;
+    name?: string | null;
+    role?: string | null;
+    tenantId?: string | null;
+  },
   config: TokenConfig,
   jti?: string,
 ): string => {
@@ -14,6 +20,8 @@ export const generateAccessToken = (
     sub: user.id,
     email: user.email,
     name: user.name || undefined,
+    role: user.role || undefined,
+    tenantId: user.tenantId || undefined,
     type: "access",
     jti,
   };
