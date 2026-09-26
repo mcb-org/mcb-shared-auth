@@ -18,13 +18,8 @@ export interface AccessTokenPayload {
   sub: string; // subject (user id)
   email: string;
   name?: string;
-<<<<<<< HEAD
   role?: string; // platform/tenant role (e.g. SUPER_ADMIN, ORG_ADMIN, DRIVER, USER)
   tenantId?: string; // tenant scope for multi-tenant data access
-=======
-  role?: string; // authorization claim consumed by authorize()
-  tenantId?: string; // tenancy claim used to scope every query
->>>>>>> edfd573 (feat(name-change): tenantId added to here)
   type: "access";
   jti?: string; // JWT ID for tracking
 }
@@ -52,7 +47,6 @@ export interface RefreshTokenRecord {
   revokedAt?: Date | null;
   replacedBy?: string | null;
   lastUsedAt?: Date | null;
-<<<<<<< HEAD
   user?: {
     id: string;
     email: string;
@@ -60,9 +54,6 @@ export interface RefreshTokenRecord {
     role?: string | null;
     tenantId?: string | null;
   };
-=======
-  user?: TokenUser;
->>>>>>> edfd573 (feat(name-change): tenantId added to here)
 }
 
 export interface RefreshTokenRepository {
@@ -76,7 +67,6 @@ export interface RefreshTokenRepository {
 }
 
 export interface GenerateTokenPairParams {
-<<<<<<< HEAD
   user: {
     id: string;
     email: string;
@@ -84,9 +74,6 @@ export interface GenerateTokenPairParams {
     role?: string | null;
     tenantId?: string | null;
   };
-=======
-  user: TokenUser;
->>>>>>> edfd573 (feat(name-change): tenantId added to here)
   deviceInfo?: string;
   ipAddress?: string;
   config: TokenConfig;

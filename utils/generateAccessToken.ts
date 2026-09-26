@@ -10,7 +10,6 @@ import jwt from "jsonwebtoken";
  * values are omitted rather than serialized as null.
  */
 export const generateAccessToken = (
-<<<<<<< HEAD
   user: {
     id: string;
     email: string;
@@ -18,9 +17,6 @@ export const generateAccessToken = (
     role?: string | null;
     tenantId?: string | null;
   },
-=======
-  user: TokenUser,
->>>>>>> edfd573 (feat(name-change): tenantId added to here)
   config: TokenConfig,
   jti?: string,
 ): string => {
@@ -28,13 +24,8 @@ export const generateAccessToken = (
     sub: user.id,
     email: user.email,
     name: user.name || undefined,
-<<<<<<< HEAD
     role: user.role || undefined,
     tenantId: user.tenantId || undefined,
-=======
-    ...(user.role ? { role: user.role } : {}),
-    ...(user.tenantId ? { tenantId: user.tenantId } : {}),
->>>>>>> edfd573 (feat(name-change): tenantId added to here)
     type: "access",
     jti,
   };
