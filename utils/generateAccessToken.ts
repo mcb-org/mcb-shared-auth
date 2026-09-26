@@ -1,5 +1,5 @@
 import type { TokenConfig } from "../types";
-import type { AccessTokenPayload, TokenUser } from "../types";
+import type { AccessTokenPayload } from "../types";
 import jwt from "jsonwebtoken";
 
 /**

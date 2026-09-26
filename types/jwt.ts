@@ -6,13 +6,6 @@
  * both initial issuance and refresh rotation. Persistence shape (Prisma) allows
  * nulls; the signed payload omits empty values.
  */
-export interface TokenUser {
-  id: string;
-  email: string;
-  name?: string | null;
-  role?: string | null;
-  tenantId?: string | null;
-}
 
 export interface AccessTokenPayload {
   sub: string; // subject (user id)
