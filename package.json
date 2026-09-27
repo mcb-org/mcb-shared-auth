@@ -1,7 +1,8 @@
 {
   "name": "@medi-car-bd/mcb-shared-auth",
-  "version": "0.0.8",
+  "version": "0.0.11",
   "description": "Shared authentication module for MCB applications",
+  "packageManager": "pnpm@10.18.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "publishConfig": {
