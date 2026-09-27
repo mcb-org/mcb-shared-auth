@@ -1,24 +1,48 @@
 name: Publish to npm
 
+# Two ways to publish:
+#   1. Publish a GitHub release whose tag matches the package.json version.
+#   2. Run this workflow manually from the Actions tab and supply a tag.
+# Both paths require a Git tag, because a GitHub release is only ever cut from
+# a commit, and the commit that publishes a version should be the same one that
+# carries the matching version string.
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to publish (must match the version in package.json)'
+        description: "Tag to publish (must match the version in package.json)"
         required: true
+        type: string
+
+# npm refuses to overwrite a published version, so a second run is a no-op
+# rather than an error. Grouping by package name also prevents two releases
+# from racing each other onto the registry at the same time.
+concurrency:
+  group: npm-publish-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  # Required for npm provenance: lets the runner mint a short-lived OIDC token
+  # so npm can attest the package was built from this workflow run.
+  id-token: write
 
 jobs:
   publish:
     name: Build and publish
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    env:
+      # The package is public, but an explicit access flag keeps the publish
+      # correct if a scoped package is ever switched to private.
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          # For a release event this is the release tag; for a manual run the
+          # tag is supplied as an input.
           ref: ${{ github.event.release.tag_name || inputs.tag }}
 
       - name: Setup pnpm
@@ -28,25 +52,55 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          # Writes an .npmrc that points at the public registry and wires it to
+          # NODE_AUTH_TOKEN.
           registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      - name: Verify npm token is available
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN is not set on this repository."
+            echo "Add it under Settings > Secrets and variables > Actions >"
+            echo "Secrets (not the Variables tab) and name it exactly NPM_TOKEN."
+            exit 1
+          fi
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
 
       - name: Build
         run: pnpm build
 
       - name: Verify build output
-        run: test -f dist/index.js && test -f dist/index.d.ts
+        run: |
+          test -f dist/index.js
+          test -f dist/index.d.ts
 
-      - name: Read package name and version
+      - name: Read package metadata
         id: pkg
         run: |
-          node <<'EOF' >> "$GITHUB_OUTPUT"
-          const pkg = require('./package.json');
-          console.log(`name=${pkg.name}`);
-          console.log(`version=${pkg.version}`);
-          EOF
+          echo "name=$(node -p "require('./package.json').name")" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # A tag that disagrees with package.json is the failure mode that silently
+      # publishes the wrong version: a v0.0.15 release off a 0.0.14 commit ships
+      # 0.0.14 and leaves the tag pointing at nothing that was ever released.
+      - name: Verify tag matches package version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="${{ steps.pkg.outputs.version }}"
+          if [ "$TAG" != "$PKG_VERSION" ]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' does not match package.json version '$PKG_VERSION'."
+            exit 1
+          fi
+          echo "Publishing ${{ steps.pkg.outputs.name }}@$PKG_VERSION"
 
       - name: Check if version is already published
         id: check
@@ -60,6 +114,4 @@ jobs:
 
       - name: Publish to npm
         if: steps.check.outputs.published == 'false'
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance

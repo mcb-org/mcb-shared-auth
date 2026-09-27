@@ -56,7 +56,10 @@ Only the credential authority should call this. Persistence is yours to
 provide:
 
 ```ts
-import { generateTokenPair, type RefreshTokenRepository } from "@medi-car-bd/mcb-shared-auth";
+import {
+  generateTokenPair,
+  type RefreshTokenRepository,
+} from "@medi-car-bd/mcb-shared-auth";
 
 const { accessToken, refreshToken } = await generateTokenPair({
   user: { id, email, name, role, tenantId },
@@ -98,16 +101,16 @@ Every export below is available from the package root.
 
 ### Tokens
 
-| Export | Purpose |
-| --- | --- |
-| `generateTokenPair` | Issue an access/refresh pair and persist the hashed refresh token |
-| `generateAccessToken` | Sign an access token; includes `role` and `tenantId` when present |
+| Export                 | Purpose                                                                 |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `generateTokenPair`    | Issue an access/refresh pair and persist the hashed refresh token       |
+| `generateAccessToken`  | Sign an access token; includes `role` and `tenantId` when present       |
 | `generateRefreshToken` | Sign a refresh token, returning both the raw value and its SHA-256 hash |
-| `rotateRefreshToken` | Single-use rotation with reuse detection |
-| `revokeAllUserTokens` | Bulk revocation, optionally sparing the current session |
-| `generateTokenId` | 32-byte random `jti` |
-| `hashToken` | SHA-256 hex digest, for storing a token safely |
-| `signToken` | Minimal signer driven by env vars, for simple cases |
+| `rotateRefreshToken`   | Single-use rotation with reuse detection                                |
+| `revokeAllUserTokens`  | Bulk revocation, optionally sparing the current session                 |
+| `generateTokenId`      | 32-byte random `jti`                                                    |
+| `hashToken`            | SHA-256 hex digest, for storing a token safely                          |
+| `signToken`            | Minimal signer driven by env vars, for simple cases                     |
 
 Access tokens are signed with `audience: "mcb-services"` and `issuer:
 "mcb-auth"`. Refresh tokens support a separate signing secret via
@@ -115,23 +118,23 @@ Access tokens are signed with `audience: "mcb-services"` and `issuer:
 
 ### Middleware
 
-| Export | Purpose |
-| --- | --- |
-| `authenticate` | Verify a token and attach claims to `req.user` |
-| `authorize` | Role guard: `authorize("ORG_ADMIN", "SUPER_ADMIN")` |
-| `notFound` | `404` handler |
-| `errorHandler` | Central error responder, normalising known error shapes |
-| `processRequest` | Request logger that stamps the correlation id |
+| Export           | Purpose                                                 |
+| ---------------- | ------------------------------------------------------- |
+| `authenticate`   | Verify a token and attach claims to `req.user`          |
+| `authorize`      | Role guard: `authorize("ORG_ADMIN", "SUPER_ADMIN")`     |
+| `notFound`       | `404` handler                                           |
+| `errorHandler`   | Central error responder, normalising known error shapes |
+| `processRequest` | Request logger that stamps the correlation id           |
 
 ### Utilities
 
-| Export | Purpose |
-| --- | --- |
-| `comparePassword` | bcryptjs password comparison |
-| `limiter` | `express-rate-limit` instance, 100 requests / 15 min |
-| `AppError` | Operational error carrying an HTTP status |
-| `catchAsync` | Wrap an async handler so rejections reach the error handler |
-| `logger` | Winston logger with daily rotating files |
+| Export            | Purpose                                                     |
+| ----------------- | ----------------------------------------------------------- |
+| `comparePassword` | bcryptjs password comparison                                |
+| `limiter`         | `express-rate-limit` instance, 100 requests / 15 min        |
+| `AppError`        | Operational error carrying an HTTP status                   |
+| `catchAsync`      | Wrap an async handler so rejections reach the error handler |
+| `logger`          | Winston logger with daily rotating files                    |
 
 ### Types
 
@@ -167,11 +170,11 @@ access token, and it assumes they are present.
 
 Read at import time, so they must be set before the package is loaded.
 
-| Variable | Used by | Notes |
-| --- | --- | --- |
-| `JWT_SECRET` | `authenticate`, `signToken` | **Required** |
-| `JWT_EXPIRES_IN` | `signToken` | e.g. `15m` |
-| `NODE_ENV` | `logger` | Selects console vs file logging |
+| Variable         | Used by                     | Notes                           |
+| ---------------- | --------------------------- | ------------------------------- |
+| `JWT_SECRET`     | `authenticate`, `signToken` | **Required**                    |
+| `JWT_EXPIRES_IN` | `signToken`                 | e.g. `15m`                      |
+| `NODE_ENV`       | `logger`                    | Selects console vs file logging |
 
 Everything else — token lifetimes and the refresh secret — is passed explicitly
 through `TokenConfig`, so there is no hidden global state.
@@ -182,7 +185,7 @@ Ordered by how much they matter.
 
 ### 1. `authenticate` does not yet verify `audience` or `issuer`
 
-Tokens are *issued* with `aud` and `iss`, but `authenticate` verifies only the
+Tokens are _issued_ with `aud` and `iss`, but `authenticate` verifies only the
 signature and expiry. Because every service signs with one shared secret, a
 token minted for any other purpose is currently accepted anywhere.
 
@@ -238,7 +241,10 @@ import { rateLimit } from "express-rate-limit";
 rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 100,
-  store: new RedisStore({ prefix: "rl:", sendCommand: (...a) => redis.call(...a) }),
+  store: new RedisStore({
+    prefix: "rl:",
+    sendCommand: (...a) => redis.call(...a),
+  }),
 });
 ```
 

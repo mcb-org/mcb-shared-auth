@@ -1,0 +1,65 @@
+name: CI
+
+# Runs on every push and pull request so a broken build is caught before anyone
+# tries to publish. The publish workflow repeats these same gates, because a tag
+# can be cut from any commit and a release must never be the first time something
+# is verified.
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+# Cancel superseded runs on the same branch. A series of pushes to a PR should
+# not consume minutes re-running checks that a later push already invalidates.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Version comes from the packageManager field in package.json, so CI
+      # always uses the same pnpm as a local checkout and cannot drift.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Build
+        run: pnpm build
+
+      # package.json publishes only dist/, so a build that silently produces
+      # nothing would still publish an empty package. This is the one check that
+      # catches it before an install fails in a consuming service.
+      - name: Verify build output
+        run: |
+          test -f dist/index.js
+          test -f dist/index.d.ts
+          echo "--- exported symbols ---"
+          node -e "console.log(Object.keys(require('./dist/index.js')).sort().join('\n'))"
