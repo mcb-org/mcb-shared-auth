@@ -18,8 +18,17 @@
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
-  "keywords": [],
-  "author": "MediCarBD",
+  "keywords": [
+    "jwt",
+    "authentication",
+    "express",
+    "authorization",
+    "token-rotation"
+  ],
+  "author": {
+    "name": "Medi-Car-BD",
+    "url": "https://github.com/mcb-org"
+  },
   "license": "MIT",
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -58,6 +67,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Medi-Car-BD/mcb-shared-auth"
+    "url": "git+https://github.com/mcb-org/mcb-shared-auth.git"
+  },
+  "homepage": "https://github.com/mcb-org/mcb-shared-auth#readme",
+  "bugs": {
+    "url": "https://github.com/mcb-org/mcb-shared-auth/issues"
   }
 }
