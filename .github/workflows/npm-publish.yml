@@ -1,29 +1,20 @@
 name: Publish to npm
 
-# Two ways to publish:
-#   1. Publish a GitHub release whose tag matches the package.json version.
-#   2. Run this workflow manually from the Actions tab and supply a tag.
-# Both paths require a Git tag, because a GitHub release is only ever cut from
-# a commit, and the commit that publishes a version should be the same one that
-# carries the matching version string.
+# Fully automatic CD: bump "version" in package.json, commit, push to main.
+# That is the entire procedure. No tag to create, no GitHub Release to cut, no
+# maintainer approval step.
+#
+# The version in package.json is the single source of truth. The already-published
+# check below makes this safe to run on every push: a push that does not change
+# the version finds that version on the registry and exits successfully without
+# doing anything, so ordinary pushes are no-ops rather than failures.
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Tag to publish (must match the version in package.json)"
-        required: true
-        type: string
-      direct:
-        description: "Publish directly instead of staging for maintainer approval"
-        required: false
-        default: false
-        type: boolean
 
-# npm refuses to overwrite a published version, so a second run is a no-op
-# rather than an error. Grouping by package name also prevents two releases
-# from racing each other onto the registry at the same time.
+# npm refuses to overwrite a published version. Serialising on the repository
+# also stops two pushes landing on the registry at the same instant.
 concurrency:
   group: npm-publish-${{ github.repository }}
   cancel-in-progress: false
@@ -31,29 +22,25 @@ concurrency:
 permissions:
   contents: read
   # This is what makes trusted publishing work: the runner exchanges this
-  # workflow's identity for a short-lived OIDC token, which npm verifies
-  # against the Trusted Publisher configured for this repository. Provenance
-  # attestation then comes from the same exchange, so it no longer needs to be
-  # requested with an explicit --provenance flag.
+  # workflow's identity for a short-lived OIDC token, which npm verifies against
+  # the Trusted Publisher configured for this repository. Provenance attestation
+  # comes from the same exchange, so no --provenance flag is needed.
   id-token: write
 
 jobs:
   publish:
     name: Build and publish
     runs-on: ubuntu-latest
-    # No NPM_TOKEN here on purpose. This package has an npm Trusted Publisher
-    # configured, so the runner authenticates with a short-lived OIDC token
-    # instead. Setting NODE_AUTH_TOKEN would make npm prefer that credential and
-    # bypass the trust relationship entirely, which is both less secure and a
-    # likely source of 401s.
+    # Every step here runs in bash, including the guard logic below.
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-        with:
-          # For a release event this is the release tag; for a manual run the
-          # tag is supplied as an input.
-          ref: ${{ github.event.release.tag_name || inputs.tag }}
 
+      # Version comes from the packageManager field in package.json, so CI
+      # always uses the same pnpm as a local checkout and cannot drift.
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
 
@@ -61,8 +48,8 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 20
-          # Pins the registry. No auth token is configured here, because
-          # trusted publishing supplies credentials at publish time.
+          # Pins the registry. No auth token is configured, because trusted
+          # publishing supplies credentials at publish time.
           registry-url: https://registry.npmjs.org
           cache: pnpm
 
@@ -78,6 +65,8 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # package.json publishes only dist/, so a build that silently produced
+      # nothing would still ship an empty package to every consumer.
       - name: Verify build output
         run: |
           test -f dist/index.js
@@ -88,39 +77,34 @@ jobs:
         run: |
           echo "name=$(node -p "require('./package.json').name")" >> "$GITHUB_OUTPUT"
           echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-
-      # A tag that disagrees with package.json is the failure mode that silently
-      # publishes the wrong version: a v0.0.15 release off a 0.0.14 commit ships
-      # 0.0.14 and leaves the tag pointing at nothing that was ever released.
-      - name: Verify tag matches package version
-        run: |
-          TAG="${GITHUB_REF_NAME#v}"
-          PKG_VERSION="${{ steps.pkg.outputs.version }}"
-          if [ "$TAG" != "$PKG_VERSION" ]; then
-            echo "::error::Tag '$GITHUB_REF_NAME' does not match package.json version '$PKG_VERSION'."
-            exit 1
-          fi
-          echo "Publishing ${{ steps.pkg.outputs.name }}@$PKG_VERSION"
+          echo "### Publish ${{ steps.pkg.outputs.name }}@${{ steps.pkg.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check if version is already published
         id: check
         run: |
-          if npm view "${{ steps.pkg.outputs.name }}@${{ steps.pkg.outputs.version }}" version > /dev/null 2>&1; then
-            echo "Already published: ${{ steps.pkg.outputs.name }}@${{ steps.pkg.outputs.version }}"
+          NAME="${{ steps.pkg.outputs.name }}"
+          VERSION="${{ steps.pkg.outputs.version }}"
+          if npm view "${NAME}@${VERSION}" version > /dev/null 2>&1; then
             echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "${NAME}@${VERSION} is already on the registry. Nothing to do."
+            echo "Already published \`${NAME}@${VERSION}\` - no action taken." >> "$GITHUB_STEP_SUMMARY"
           else
             echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "${VERSION} is not on the registry yet."
           fi
 
-      - name: Submit to npm
+      # Direct publish, not staging. This requires the Trusted Publisher on
+      # npmjs.com to have "publish directly" allowed; a stage-only configuration
+      # will reject this command.
+      - name: Publish to npm
+        if: steps.check.outputs.published == 'false'
+        run: npm publish --access public
+
+      - name: Confirm the new version is live
         if: steps.check.outputs.published == 'false'
         run: |
-          if [ "${{ inputs.direct }}" = "true" ]; then
-            echo "Publishing directly with 'npm publish'."
-            npm publish --access public
-          else
-            echo "Staging with 'npm stage publish'."
-            echo "A maintainer must approve this version with 2FA on npmjs.com"
-            echo "before it becomes publicly visible and moves the latest tag."
-            npm stage publish --access public
-          fi
+          NAME="${{ steps.pkg.outputs.name }}"
+          VERSION="${{ steps.pkg.outputs.version }}"
+          echo "Published ${NAME}@${VERSION}"
+          echo "Published \`${NAME}@${VERSION}\` to npm." >> "$GITHUB_STEP_SUMMARY"
+          npm view "${NAME}@${VERSION}" version
