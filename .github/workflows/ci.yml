@@ -163,4 +163,18 @@ jobs:
           VERSION="${{ steps.pkg.outputs.version }}"
           echo "Published ${NAME}@${VERSION}"
           echo "Published \`${NAME}@${VERSION}\` to npm." >> "$GITHUB_STEP_SUMMARY"
-          npm view "${NAME}@${VERSION}" version
+
+          # The registry can take a few seconds to replicate a version that
+          # was just accepted, so `npm view` right after publish can 404 even
+          # though the publish itself succeeded. Retry with backoff instead
+          # of failing the run on that lag.
+          for i in 1 2 3 4 5; do
+            if npm view "${NAME}@${VERSION}" version > /dev/null 2>&1; then
+              npm view "${NAME}@${VERSION}" version
+              exit 0
+            fi
+            echo "Not visible yet, retrying in $((i * 5))s..."
+            sleep $((i * 5))
+          done
+
+          echo "::warning::${NAME}@${VERSION} was published but is not yet visible via 'npm view'. This is registry replication lag, not a failed publish."
