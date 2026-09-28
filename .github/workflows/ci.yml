@@ -1,21 +1,19 @@
 name: CI
 
-# Runs on every push and pull request so a broken build is caught before anyone
-# tries to publish. The publish workflow repeats these same gates, because a tag
-# can be cut from any commit and a release must never be the first time something
-# is verified.
+# Single workflow for both CI and CD:
+#   - Every push and pull request runs the Verify job so a broken build is
+#     caught before anyone tries to publish.
+#   - A push to main additionally runs the Publish job. Bumping "version" in
+#     package.json and pushing to main is the entire release procedure: no
+#     tag, no GitHub Release, no manual trigger. The already-published check
+#     makes this safe on every push to main — a push that doesn't change the
+#     version finds that version on the registry and is a no-op.
 on:
   push:
     branches: [main, dev]
   pull_request:
     branches: [main, dev]
   workflow_dispatch:
-
-# Cancel superseded runs on the same branch. A series of pushes to a PR should
-# not consume minutes re-running checks that a later push already invalidates.
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -24,6 +22,12 @@ jobs:
   verify:
     name: Verify
     runs-on: ubuntu-latest
+    # Cancel superseded runs on the same branch. A series of pushes to a PR
+    # should not consume minutes re-running checks that a later push already
+    # invalidates.
+    concurrency:
+      group: ci-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -55,11 +59,108 @@ jobs:
         run: pnpm build
 
       # package.json publishes only dist/, so a build that silently produces
-      # nothing would still publish an empty package. This is the one check that
-      # catches it before an install fails in a consuming service.
+      # nothing would still publish an empty package. This is the one check
+      # that catches it before an install fails in a consuming service.
       - name: Verify build output
         run: |
           test -f dist/index.js
           test -f dist/index.d.ts
           echo "--- exported symbols ---"
           node -e "console.log(Object.keys(require('./dist/index.js')).sort().join('\n'))"
+
+  publish:
+    name: Build and publish
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # npm refuses to overwrite a published version. Serialising on the
+    # repository also stops two pushes landing on the registry at the same
+    # instant.
+    concurrency:
+      group: npm-publish-${{ github.repository }}
+      cancel-in-progress: false
+    # Every step here runs in bash, including the guard logic below.
+    defaults:
+      run:
+        shell: bash
+    env:
+      # This package's npm Trusted Publisher is not set up for this repo, so
+      # publishing authenticates with a classic automation token instead.
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          # Writes an .npmrc that points at the public registry and wires it
+          # to NODE_AUTH_TOKEN.
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+
+      - name: Verify npm token is available
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "::error::NPM_TOKEN is not set on this repository."
+            echo "Add it under Settings > Secrets and variables > Actions >"
+            echo "Secrets (not the Variables tab) and name it exactly NPM_TOKEN."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Build
+        run: pnpm build
+
+      # package.json publishes only dist/, so a build that silently produced
+      # nothing would still ship an empty package to every consumer.
+      - name: Verify build output
+        run: |
+          test -f dist/index.js
+          test -f dist/index.d.ts
+
+      - name: Read package metadata
+        id: pkg
+        run: |
+          echo "name=$(node -p "require('./package.json').name")" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+          echo "### Publish $(node -p "require('./package.json').name")@$(node -p "require('./package.json').version")" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check if version is already published
+        id: check
+        run: |
+          NAME="${{ steps.pkg.outputs.name }}"
+          VERSION="${{ steps.pkg.outputs.version }}"
+          if npm view "${NAME}@${VERSION}" version > /dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "${NAME}@${VERSION} is already on the registry. Nothing to do."
+            echo "Already published \`${NAME}@${VERSION}\` - no action taken." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "${VERSION} is not on the registry yet."
+          fi
+
+      - name: Publish to npm
+        if: steps.check.outputs.published == 'false'
+        run: npm publish --access public
+
+      - name: Confirm the new version is live
+        if: steps.check.outputs.published == 'false'
+        run: |
+          NAME="${{ steps.pkg.outputs.name }}"
+          VERSION="${{ steps.pkg.outputs.version }}"
+          echo "Published ${NAME}@${VERSION}"
+          echo "Published \`${NAME}@${VERSION}\` to npm." >> "$GITHUB_STEP_SUMMARY"
+          npm view "${NAME}@${VERSION}" version
