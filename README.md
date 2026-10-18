@@ -26,6 +26,16 @@ npm install @medi-car-bd/mcb-shared-auth
 Requires **Express 4** as a peer dependency (`^4.18.2`). The package targets
 CommonJS and ships type declarations.
 
+## Operational helpers
+
+Shared so every service behaves the same under an orchestrator:
+
+- `validateEnv({ service, required, secrets })` exits at startup naming every missing variable, and in production rejects secrets shorter than 32 characters or obvious placeholders.
+- `healthHandler(service)` is a liveness probe with no dependencies.
+- `readyHandler(service, { database: () => prisma.$queryRaw\`SELECT 1\` })` returns 200 only when every check passes, otherwise 503. List only dependencies the service cannot work without; the response names failed checks but never the underlying error.
+- `installGracefulShutdown(server, [cleanup, ...])` handles SIGTERM/SIGINT by draining the server, running the cleanups, then exiting, with a hard timeout.
+- `verifyAccessToken(token)` is the single access-token check used by `authenticate` and by Socket.IO handshakes.
+
 ## Quick start
 
 ### Protect a route

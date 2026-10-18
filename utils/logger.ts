@@ -30,6 +30,13 @@ export const logger = createLogger({
   ],
 });
 
+// Containers are expected to log to stdout: files inside a container are lost
+// when it is replaced and invisible to `docker logs` and log shippers. The
+// files above are kept for hosts that are not containerised.
+if (NODE_ENV === "production") {
+  logger.add(new transports.Console({ format: format.json() }));
+}
+
 if (NODE_ENV !== "production") {
   logger.add(
     new transports.Console({
