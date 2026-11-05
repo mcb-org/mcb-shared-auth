@@ -3,7 +3,7 @@ export class AppError extends Error {
   status: "fail" | "error";
   isOperational: boolean;
   errmsg?: string;
-  code?: number;
+  code?: number | string;
   errors?: Record<string, unknown>;
   path?: string;
   value?: string | number;
