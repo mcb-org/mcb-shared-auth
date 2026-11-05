@@ -6,6 +6,7 @@ import {
   findEnvProblems,
   parseOrigins,
   readyHandler,
+  trustProxySetting,
 } from "../index";
 
 test("CORS origins: defaults apply when unset, trailing slashes are trimmed", () => {
@@ -110,4 +111,16 @@ test("readiness is 503 on a failed or hung check, and never leaks the error", as
     readyHandler("svc", { database: () => new Promise(() => undefined) }, 50),
   );
   assert.equal(hung.status, 503);
+});
+
+test("by default only this machine and private networks may state the client address", () => {
+  assert.equal(trustProxySetting(undefined), "loopback, uniquelocal");
+  assert.equal(trustProxySetting("  "), "loopback, uniquelocal");
+});
+
+test("TRUST_PROXY accepts a hop count, a boolean or an address list", () => {
+  assert.equal(trustProxySetting("1"), 1);
+  assert.equal(trustProxySetting("false"), false);
+  assert.equal(trustProxySetting("true"), true);
+  assert.equal(trustProxySetting("10.0.0.5, loopback"), "10.0.0.5, loopback");
 });

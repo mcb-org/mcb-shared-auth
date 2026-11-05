@@ -41,6 +41,9 @@ export const authProxy = (
         const value = req.headers[name];
         if (typeof value === "string") headers[name] = value;
       }
+      // The real caller, so the auth service's per-IP limit does not count every
+      // user of this service as one client.
+      if (req.ip) headers["x-forwarded-for"] = req.ip;
 
       let upstream: globalThis.Response;
       let text: string;
