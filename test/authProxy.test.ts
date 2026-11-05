@@ -134,3 +134,8 @@ test("a hung auth service times out as a 502 instead of hanging the request", as
   silent.close();
   assert.equal(timedOut.error?.statusCode, 502);
 });
+
+test("the caller's address is passed on, so users are not counted as one client", async () => {
+  await run(authProxy(authUrl).login, { body: {}, ip: "198.51.100.7" });
+  assert.equal(seen.headers["x-forwarded-for"], "198.51.100.7");
+});
